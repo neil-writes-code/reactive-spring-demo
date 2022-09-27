@@ -1,0 +1,24 @@
+version: '3.7'
+
+services:
+  db:
+    image: postgres
+    restart: always
+    environment:
+      POSTGRES_DB: hr-service
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+
+  hr-service:
+    build: .
+    image: hr-service
+    environment:
+      DATABASE_HOST: r2dbc:postgresql://db:5432/hr-service
+      DATABASE_USERNAME: postgres
+      DATABASE_PASSWORD: postgres
+    ports:
+      - "8080:8080"
+    restart: always
+    depends_on:
+      - db
