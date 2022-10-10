@@ -39,7 +39,7 @@ public class ControllerExceptionHandler {
                 .getAllErrors()
                 .stream()
                 .map(DefaultMessageSourceResolvable::getDefaultMessage)
-                .collect(Collectors.toList());
+                .toList();
         return ResponseEntity.badRequest().body(errors);
     }
 }

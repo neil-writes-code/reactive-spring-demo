@@ -2,20 +2,18 @@ package ca.neilwhite.hrservice.repositories;
 
 import ca.neilwhite.hrservice.models.Department;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-@Slf4j
 @Component
 @RequiredArgsConstructor
 public class DepartmentRepositoryImpl implements DepartmentRepository {
     private final EmployeeRepository employeeRepository;
     private final DatabaseClient client;
-    private static final String selectQuery = """
+    private static final String SELECT_QUERY = """
             SELECT d.id d_id, d.name d_name, m.id m_id, m.first_name m_firstName, m.last_name m_lastName,
                 m.position m_position, m.is_full_time m_isFullTime, e.id e_id, e.first_name e_firstName,
                 e.last_name e_lastName, e.position e_position, e.is_full_time e_isFullTime
@@ -33,7 +31,7 @@ public class DepartmentRepositoryImpl implements DepartmentRepository {
      */
     @Override
     public Flux<Department> findAll() {
-        return client.sql(selectQuery)
+        return client.sql(SELECT_QUERY)
                 .fetch()
                 .all()
                 .bufferUntilChanged(result -> result.get("d_id"))
@@ -48,7 +46,7 @@ public class DepartmentRepositoryImpl implements DepartmentRepository {
      */
     @Override
     public Mono<Department> findById(long id) {
-        return client.sql(String.format("%s WHERE d.id = :id", selectQuery))
+        return client.sql(String.format("%s WHERE d.id = :id", SELECT_QUERY))
                 .bind("id", id)
                 .fetch()
                 .all()
@@ -65,7 +63,7 @@ public class DepartmentRepositoryImpl implements DepartmentRepository {
      */
     @Override
     public Mono<Department> findByName(String name) {
-        return client.sql(String.format("%s WHERE d.name = :name", selectQuery))
+        return client.sql(String.format("%s WHERE d.name = :name", SELECT_QUERY))
                 .bind("name", name)
                 .fetch()
                 .all()
@@ -116,10 +114,9 @@ public class DepartmentRepositoryImpl implements DepartmentRepository {
     Mono<Department> saveDepartment(Department department) {
         if (department.getId() == null) {
             return client.sql("INSERT INTO departments(name) VALUES(:name)")
-                    .filter((statement, executeFunction) -> statement.returnGeneratedValues("id").execute())
                     .bind("name", department.getName())
-                    .fetch()
-                    .first()
+                    .filter((statement, executeFunction) -> statement.returnGeneratedValues("id").execute())
+                    .fetch().first()
                     .doOnNext(result -> department.setId(Long.parseLong(result.get("id").toString())))
                     .thenReturn(department);
         } else {
