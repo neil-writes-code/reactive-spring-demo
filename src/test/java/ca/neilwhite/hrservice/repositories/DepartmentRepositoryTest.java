@@ -120,7 +120,6 @@ class DepartmentRepositoryTest {
                 .employees(stubbedDevDepartment().getEmployees())
                 .build();
 
-
         Department newDepartmentWithManagerAndEmployees = Department.builder()
                 .name("Accounting")
                 .manager(stubbedDevDepartment().getManager().get())
@@ -145,10 +144,15 @@ class DepartmentRepositoryTest {
         Department employeesUpdatedDepartment = stubbedDevDepartment();
         employeesUpdatedDepartment.setEmployees(stubbedHRDepartment().getEmployees());
 
+        Department removeManagerAndEmployees = stubbedDevDepartment();
+        removeManagerAndEmployees.setManager(null);
+        removeManagerAndEmployees.setEmployees(List.of());
+
         return Stream.of(
                 Arguments.of(nameUpdatedDepartment),
                 Arguments.of(managerUpdatedDepartment),
-                Arguments.of(employeesUpdatedDepartment)
+                Arguments.of(employeesUpdatedDepartment),
+                Arguments.of(removeManagerAndEmployees)
         );
     }
 

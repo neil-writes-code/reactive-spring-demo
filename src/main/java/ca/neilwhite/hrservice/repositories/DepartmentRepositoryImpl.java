@@ -1,12 +1,15 @@
 package ca.neilwhite.hrservice.repositories;
 
 import ca.neilwhite.hrservice.models.Department;
+import ca.neilwhite.hrservice.models.Employee;
 import lombok.RequiredArgsConstructor;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+
+import java.util.List;
 
 @Component
 @RequiredArgsConstructor
@@ -31,7 +34,9 @@ public class DepartmentRepositoryImpl implements DepartmentRepository {
      */
     @Override
     public Flux<Department> findAll() {
-        return client.sql(SELECT_QUERY)
+        String query = String.format("%s ORDER BY d.id", SELECT_QUERY);
+
+        return client.sql(query)
                 .fetch()
                 .all()
                 .bufferUntilChanged(result -> result.get("d_id"))
@@ -46,7 +51,9 @@ public class DepartmentRepositoryImpl implements DepartmentRepository {
      */
     @Override
     public Mono<Department> findById(long id) {
-        return client.sql(String.format("%s WHERE d.id = :id", SELECT_QUERY))
+        String query = String.format("%s WHERE d.id = :id", SELECT_QUERY);
+
+        return client.sql(query)
                 .bind("id", id)
                 .fetch()
                 .all()
@@ -63,7 +70,9 @@ public class DepartmentRepositoryImpl implements DepartmentRepository {
      */
     @Override
     public Mono<Department> findByName(String name) {
-        return client.sql(String.format("%s WHERE d.name = :name", SELECT_QUERY))
+        String query = String.format("%s WHERE d.name = :name", SELECT_QUERY);
+
+        return client.sql(query)
                 .bind("name", name)
                 .fetch()
                 .all()
@@ -84,8 +93,8 @@ public class DepartmentRepositoryImpl implements DepartmentRepository {
         return this.saveDepartment(department)
                 .flatMap(this::saveManager)
                 .flatMap(this::saveEmployees)
-                .flatMap(this::deleteDepartmentManagers)
-                .flatMap(this::saveDepartmentManagers)
+                .flatMap(this::deleteDepartmentManager)
+                .flatMap(this::saveDepartmentManager)
                 .flatMap(this::deleteDepartmentEmployees)
                 .flatMap(this::saveDepartmentEmployees);
     }
@@ -99,7 +108,7 @@ public class DepartmentRepositoryImpl implements DepartmentRepository {
     @Override
     @Transactional
     public Mono<Void> delete(Department department) {
-        return this.deleteDepartmentManagers(department)
+        return this.deleteDepartmentManager(department)
                 .flatMap(this::deleteDepartmentEmployees)
                 .flatMap(this::deleteDepartment)
                 .then();
@@ -111,7 +120,7 @@ public class DepartmentRepositoryImpl implements DepartmentRepository {
      * @param department {@link Department}
      * @return Mono of {@link Department}
      */
-    Mono<Department> saveDepartment(Department department) {
+    private Mono<Department> saveDepartment(Department department) {
         if (department.getId() == null) {
             return client.sql("INSERT INTO departments(name) VALUES(:name)")
                     .bind("name", department.getName())
@@ -134,7 +143,7 @@ public class DepartmentRepositoryImpl implements DepartmentRepository {
      * @param department {@link Department}
      * @return Mono of {@link Department}
      */
-    Mono<Department> saveManager(Department department) {
+    private Mono<Department> saveManager(Department department) {
         return Mono.justOrEmpty(department.getManager())
                 .flatMap(employeeRepository::save)
                 .doOnNext(department::setManager)
@@ -147,7 +156,7 @@ public class DepartmentRepositoryImpl implements DepartmentRepository {
      * @param department {@link Department}
      * @return Mono of {@link Department}
      */
-    Mono<Department> saveEmployees(Department department) {
+    private Mono<Department> saveEmployees(Department department) {
         return Flux.fromIterable(department.getEmployees())
                 .flatMap(this.employeeRepository::save)
                 .collectList()
@@ -161,10 +170,11 @@ public class DepartmentRepositoryImpl implements DepartmentRepository {
      * @param department {@link Department}
      * @return Mono of {@link Department}
      */
-    Mono<Department> saveDepartmentManagers(Department department) {
+    private Mono<Department> saveDepartmentManager(Department department) {
+        String query = "INSERT INTO department_managers(department_id, employee_id) VALUES (:id, :empId)";
+
         return Mono.justOrEmpty(department.getManager())
-                .flatMap(manager -> client.sql("INSERT INTO department_managers(department_id, employee_id) "
-                                + "VALUES (:id, :empId)")
+                .flatMap(manager -> client.sql(query)
                         .bind("id", department.getId())
                         .bind("empId", manager.getId())
                         .fetch().rowsUpdated())
@@ -177,10 +187,11 @@ public class DepartmentRepositoryImpl implements DepartmentRepository {
      * @param department {@link Department}
      * @return Mono of {@link Department}
      */
-    Mono<Department> saveDepartmentEmployees(Department department) {
+    private Mono<Department> saveDepartmentEmployees(Department department) {
+        String query = "INSERT INTO department_employees(department_id, employee_id) VALUES (:id, :empId)";
+
         return Flux.fromIterable(department.getEmployees())
-                .flatMap(employee -> client.sql("INSERT INTO department_employees(department_id, employee_id) "
-                                + "VALUES (:id, :empId)")
+                .flatMap(employee -> client.sql(query)
                         .bind("id", department.getId())
                         .bind("empId", employee.getId())
                         .fetch().rowsUpdated())
@@ -194,7 +205,7 @@ public class DepartmentRepositoryImpl implements DepartmentRepository {
      * @param department {@link Department}
      * @return Mono of {@link Void}
      */
-    Mono<Void> deleteDepartment(Department department) {
+    private Mono<Void> deleteDepartment(Department department) {
         return client.sql("DELETE FROM departments WHERE id = :id")
                 .bind("id", department.getId())
                 .fetch().first()
@@ -207,12 +218,16 @@ public class DepartmentRepositoryImpl implements DepartmentRepository {
      * @param department {@link Department}
      * @return Mono of {@link Department}
      */
-    Mono<Department> deleteDepartmentManagers(Department department) {
-        return client.sql("DELETE FROM department_managers WHERE department_id = :id")
-                .bind("id", department.getId())
-                .fetch().rowsUpdated()
-                .thenReturn(department);
+    private Mono<Department> deleteDepartmentManager(Department department) {
+        String query = "DELETE FROM department_managers WHERE department_id = :departmentId OR employee_id = :managerId";
 
+        return Mono.just(department)
+                .flatMap(dep -> client.sql(query)
+                        .bind("departmentId", dep.getId())
+                        .bindNull("managerId", Long.class)
+                        .bind("managerId", dep.getManager().orElseGet(() -> Employee.builder().id(0L).build()).getId())
+                        .fetch().rowsUpdated())
+                .thenReturn(department);
     }
 
     /**
@@ -221,10 +236,16 @@ public class DepartmentRepositoryImpl implements DepartmentRepository {
      * @param department {@link Department}
      * @return Mono of {@link Department}
      */
-    Mono<Department> deleteDepartmentEmployees(Department department) {
-        return client.sql("DELETE FROM department_employees WHERE department_id = :id")
-                .bind("id", department.getId())
-                .fetch().rowsUpdated()
+    private Mono<Department> deleteDepartmentEmployees(Department department) {
+        String query = "DELETE FROM department_employees WHERE department_id = :id OR employee_id in (:ids)";
+
+        List<Long> employeeIds = department.getEmployees().stream().map(Employee::getId).toList();
+
+        return Mono.just(department)
+                .flatMap(dep -> client.sql(query)
+                        .bind("id", department.getId())
+                        .bind("ids", employeeIds.isEmpty() ? List.of(0) : employeeIds)
+                        .fetch().rowsUpdated())
                 .thenReturn(department);
     }
 }

@@ -13,12 +13,12 @@ CREATE TABLE IF NOT EXISTS employees(
 
 CREATE TABLE IF NOT EXISTS department_employees(
     department_id BIGSERIAL REFERENCES departments (id),
-    employee_id   BIGSERIAL REFERENCES employees (id),
+    employee_id   BIGSERIAL UNIQUE REFERENCES employees (id),
     PRIMARY KEY(department_id, employee_id)
 );
 
 CREATE TABLE IF NOT EXISTS department_managers(
-    department_id BIGSERIAL REFERENCES departments (id),
-    employee_id   BIGSERIAL REFERENCES employees (id),
+    department_id BIGSERIAL UNIQUE REFERENCES departments (id),
+    employee_id   BIGSERIAL UNIQUE REFERENCES employees (id),
     PRIMARY KEY(department_id, employee_id)
 );
